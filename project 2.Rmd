@@ -1,0 +1,124 @@
+---
+title: 'Practical Machine Learning: Course Project'
+author: "Sizwe Mashao"
+date: "14 June 2017"
+output:
+  html_document: default
+  pdf_document: default
+  word_document: default
+---
+## Introduction
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset).
+
+## The Data
+
+The training data for this project are available here:
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+
+The test data are available here:
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = F, cache = T, message=F, warning=F)
+library(caret)
+library(randomForest)
+library(dplyr)
+library(corrgram)
+library(gbm)
+```
+
+
+
+## Cleaning the Data
+
+To to Clean the data, wrote a function that removes empty columns and columns that dont have any variation. It also removes the first six coloumns(names, dates and stuff).
+The function can be seen in the code chunk below.
+
+```{r data cleaning function, echo = TRUE}
+clean.data <- function(data,thresh_hold = 0.5)
+{
+require(dplyr)
+require(caret)  
+xx <- as.data.frame(sapply(data,is.na))
+xy <- as.data.frame(sapply(xx,sum))/nrow(xx)
+xz <- subset(xy,sapply(xx, sum)/nrow(xx) <= thresh_hold )
+xs <- as.data.frame(t(xz))
+xs <- subset(data, select = names(xs))
+nsv <- nearZeroVar(xs, saveMetrics = T)
+nsv <- subset(nsv, nsv$nzv =="FALSE")
+nmes <- names(as.data.frame(t(nsv)))
+subset(xs,select = nmes)[c(-1:-6)]
+}
+```
+
+## The Model
+
+Now we can download and model the data. The data is split into a training and test set (70:30) and then cleaned as per above.
+
+```{r data entry and prep, echo= TRUE}
+train_url <- "http://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+test_url <- "http://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+
+training <- read.csv(train_url)
+test_final <- read.csv(test_url)
+
+in_train  <- createDataPartition(training$classe, p=0.7, list=FALSE)
+train <- training[in_train, ]
+test  <- training[-in_train, ]
+
+train <- clean.data(train)
+test <- clean.data(test)
+```
+
+
+
+Before running the models we fit a correlogram to the data to see if any correlations stand out
+```{r correlogram}
+cor <- corrgram(train[,-ncol(train)], lower.panel = NULL)
+```
+
+Now we can fit the models. We fit a Random forest and gbm model to see which is more accurate.
+
+```{r models, echo=T, message= F}
+cv_mod <- trainControl(method="cv", number=3, verboseIter=FALSE)
+
+garbage <- capture.output(fit_rf <- train(classe ~ ., data=train, method="rf",trControl=cv_mod))
+garbage1 <- capture.output(fit_gbm <- train(classe ~ ., data=train, method="gbm",trControl=cv_mod))
+predict_rf <- predict(fit_rf, newdata=test)
+predict_gbm <- predict(fit_gbm, newdata=test)
+
+x <- confusionMatrix(predict_rf, test$classe)
+y <- confusionMatrix(predict_gbm, test$classe)
+```
+##Results
+
+Now we check which the models was more accurate.
+
+### confusion Matrix for the random forest:
+
+```{r}
+x
+```
+### confusion Matrix for the gbm:
+
+```{r}
+y
+```
+
+from this we see that both are very accurate but the random forrest was more accurate.
+
+### Predictions
+
+Now all thats left is to run the perdictions on the test set using the RF model.
+```{r}
+my_predictions <- predict(fit_rf, newdata=test_final)
+my_predictions
+```
+
+## Thank you.
